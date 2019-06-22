@@ -16,12 +16,12 @@ import torch
 
 
 class BRKGA(torch.nn.Module):
-    def __init__(self, populationShape, eliteFraction=0.2, mutantFraction=0.1):
+    def __init__(self, populationShape, elites=1, mutants=1):
         super().__init__()
         self.keys = torch.nn.Parameter(torch.rand(*populationShape))
         count = len(self.keys)
-        self.eliteCount = max(1, int(eliteFraction * count))
-        self.mutantCount = max(1, int(mutantFraction * count))
+        self.eliteCount = max(1, elites)
+        self.mutantCount = max(1, mutants)
         self.nonMutantCount = count - self.mutantCount
     #------------------------------------------------------
     def orderBy(self, results):
@@ -29,10 +29,9 @@ class BRKGA(torch.nn.Module):
         Sort the population of keys by the objective function 'results'.
         results: a tensor of objective function values (1D tensor), one value per row in 'self.keys'.
         """
-        with torch.no_grad():
-            values,indexes = results.sort()
-            self.keys = torch.nn.Parameter(self.keys[indexes])
-            return values[0],self.keys[0]
+        values,indexes = results.sort()
+        self.keys = torch.nn.Parameter(self.keys[indexes])
+        return values[0],self.keys[0]
     #------------------------------------------------------
     @property
     def elites(self):

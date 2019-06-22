@@ -27,7 +27,7 @@ def box(fun, lower, upper):
     return inner
 
 
-def Optimize(keyShape, ef=0.1, mf=0.2):
+def Optimize(keyShape, elites=2, mutants=2):
     """
     Return the Random-Key that minimizes the Sphere function
     in the interval (-50,+50) over 'keyShape[1]' dimensions.
@@ -36,7 +36,7 @@ def Optimize(keyShape, ef=0.1, mf=0.2):
     lower = -50.0
     upper =  50.0
     f = box(Sphere, lower, upper)
-    pop = BRKGA(keyShape, eliteFraction=ef, mutantFraction=mf)
+    pop = BRKGA(keyShape, elites=elites, mutants=mutants)
     results = pop(f)
     bestResult,best = pop.orderBy(results)
     print(f"[{trial:6d}] {bestResult:.8f}")
@@ -58,7 +58,7 @@ def Optimize(keyShape, ef=0.1, mf=0.2):
     return bestResult,best
 
 
-def OptimizeSGD(keyShape, ef=0.1, mf=0.2):
+def OptimizeSGD(keyShape, elites=2, mutants=2):
     """
     Return the Random-Key that minimizes the Sphere function
     in the interval (-50,+50) over 'keyShape[1]' dimensions.
@@ -69,7 +69,7 @@ def OptimizeSGD(keyShape, ef=0.1, mf=0.2):
     lower = -50.0
     upper =  50.0
     f = box(Sphere, lower, upper)
-    pop = BRKGA(keyShape, eliteFraction=ef, mutantFraction=mf)
+    pop = BRKGA(keyShape, elites=elites, mutants=mutants)
     results = pop(f)
     bestResult,best = pop.orderBy(results)
     print(f"[{trial:6d}] {bestResult:.8f}")
@@ -96,8 +96,8 @@ def OptimizeSGD(keyShape, ef=0.1, mf=0.2):
         
 
 
-# Optimize((15,100), ef=0.2, mf=0.3)
-OptimizeSGD((15,100), ef=0.2, mf=0.3)
+# Optimize((15,100), elites=2, mutants=2)
+OptimizeSGD((15,100), elites=2, mutants=2)
 
 
 
