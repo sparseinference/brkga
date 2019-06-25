@@ -16,20 +16,21 @@ import torch
 
 
 class BRKGA(torch.nn.Module):
-    def __init__(self, populationShape, elites=1, mutants=1):
+    def __init__(self, populationShape, elites=1, mutants=1, optimizer=None):
         super().__init__()
         self.keys = torch.nn.Parameter(torch.rand(*populationShape))
         count = len(self.keys)
         self.eliteCount = max(1, elites)
         self.mutantCount = max(1, mutants)
         self.nonMutantCount = count - self.mutantCount
+        self.optimizer = optimizer(self.parameters()) if optimizer is not None else None
     #------------------------------------------------------
-    def orderBy(self, results):
+    def orderBy(self, results, descending=False):
         """
         Sort the population of keys by the objective function 'results'.
         results: a tensor of objective function values (1D tensor), one value per row in 'self.keys'.
         """
-        values,indexes = results.sort()
+        values,indexes = results.sort(descending=descending)
         self.keys = torch.nn.Parameter(self.keys[indexes])
         return values[0],self.keys[0]
     #------------------------------------------------------
@@ -51,6 +52,15 @@ class BRKGA(torch.nn.Module):
             self.keys.data -= lr * self.keys.grad 
             self.keys.data.clamp_(min=0, max=1)
             self.keys.grad.zero_()
+    #------------------------------------------------------
+    def optimize(self):
+        """
+        Use an application-specific optimizer (with a PyTorch API).
+        """
+        with torch.no_grad():
+            self.optimizer.step()
+            self.keys.data.clamp_(min=0, max=1)
+            self.zero_grad()
     #------------------------------------------------------
     def forward(self, closure):
         """
