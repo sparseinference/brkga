@@ -14,91 +14,143 @@ An implementation of the "Biased Random-Key Genetic Algorithm".
 
 import torch
 
+#===============================================================================
+# Wrapped Optimizers
+#===============================================================================
 
-class BRKGA(torch.nn.Module):
-    def __init__(self, populationShape, elites=1, mutants=1, optimizer=None):
+def optSGD(lr=1.0e-3, momentum=0.0, dampening=0, weight_decay=0, nesterov=False):
+    def opt(params):
+        return torch.optim.SGD(params, 
+                                lr=lr, 
+                                momentum=momentum, 
+                                dampening=dampening, 
+                                weight_decay=weight_decay, 
+                                nesterov=nesterov)
+    return opt
+
+
+def optAdam(lr=1.0e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False):
+    def opt(params):
+        return torch.optim.Adam(params, 
+                                lr=lr, 
+                                betas=betas, 
+                                eps=eps, 
+                                weight_decay=weight_decay, 
+                                amsgrad=amsgrad)
+    return opt
+
+
+def optAdagrad(lr=1.0e-2, lr_decay=0, weight_decay=0, initial_accumulator_value=0):
+    def opt(params):
+        return torch.optim.Adagrad(params, 
+                                lr=lr, 
+                                lr_decay=lr_decay, 
+                                weight_decay=weight_decay, 
+                                initial_accumulator_value=initial_accumulator_value)
+    return opt
+
+
+def optAdadelta(lr=1.0, rho=0.9, eps=1e-6, weight_decay=0):
+    def opt(params):
+        return torch.optim.Adadelta(params, lr=lr, rho=rho, eps=eps, weight_decay=weight_decay)
+    return opt
+
+
+
+#===============================================================================
+
+
+
+
+class BRKGA():
+    def __init__(self, populationShape, elites=1, mutants=1, optimizer=optSGD(), dtype=torch.float64):
         super().__init__()
-        self.keys = torch.nn.Parameter(torch.rand(*populationShape))
-        count = len(self.keys)
+        self.dtype = dtype
+        self.keys = torch.rand(*populationShape, requires_grad=True, dtype=dtype)
+        self.indexes = None
         self.eliteCount = max(1, elites)
-        self.mutantCount = max(1, mutants)
-        self.nonMutantCount = count - self.mutantCount
-        self.optimizer = optimizer(self.parameters()) if optimizer is not None else None
+        self.mutantCount = max(0, mutants)
+        self.nonMutantCount = len(self.keys) - self.mutantCount
+        self.optimizer = optimizer([self.keys])
     #------------------------------------------------------
     def orderBy(self, results, descending=False):
         """
-        Sort the population of keys by the objective function 'results'.
+        Sort the population of keys by the 'results' of mapping an objective function to each random key.
+        The best result and its random key are returned.
         results: a tensor of objective function values (1D tensor), one value per row in 'self.keys'.
         """
-        values,indexes = results.sort(descending=descending)
-        self.keys = torch.nn.Parameter(self.keys[indexes])
-        return values[0],self.keys[0]
+        values,self.indexes = results.sort(descending=descending)
+        return values[0],self.keys[self.indexes[0]]
     #------------------------------------------------------
     @property
     def elites(self):
         """
         Return a tensor of the best random keys in the population.
-        PRECONDITION: The population of random keys are sorted in ascending order 
+        PRECONDITION: The indexes of the random keys are sorted
                       by the most recent call to 'self.orderBy'.
         """
-        return self.keys[:self.eliteCount]
+        return self.keys[self.indexes[:self.eliteCount]]
     #------------------------------------------------------
-    def sgd(self, lr):
+    @property
+    def nonelites(self):
         """
-        Adjust the population of random keys 
-        in the direction of their negative gradient.
+        Return a tensor of the non-elite random keys in the population.
+        PRECONDITION: The indexes of the random keys are sorted
+                      by the most recent call to 'self.orderBy'.
         """
-        with torch.no_grad():
-            self.keys.data -= lr * self.keys.grad 
-            self.keys.data.clamp_(min=0, max=1)
-            self.keys.grad.zero_()
+        return self.keys[self.indexes[self.eliteCount:]]
     #------------------------------------------------------
     def optimize(self):
         """
-        Use an application-specific optimizer (with a PyTorch API).
+        Use the optimizer passed to the constructor to adjust the random keys
+        using the gradients computed by a call to 'results.backward()'.
+        Note: the elites may not be the best random keys after this call,
+        but the entire population of random keys will (stochastically) 
+        move toward the optimum.
         """
         with torch.no_grad():
             self.optimizer.step()
+            self.optimizer.zero_grad()
             self.keys.data.clamp_(min=0, max=1)
-            self.zero_grad()
     #------------------------------------------------------
-    def forward(self, closure):
+    def map(self, func):
         """
-        Compute a results tensor by applying the 'closure' to 
+        Compute a results tensor by applying 'func' to 
         each random key in the population.
         """
-        return torch.stack([closure(x) for x in self.keys])
+        return torch.stack([func(x) for x in self.keys])
     #------------------------------------------------------
     def evolve(self):
         """
         One iteration of the "Biased Random-Key Genetic Algorithm".
         Replaces the current population of random keys with a new population.
-        PRECONDITION: The population of random keys are sorted in ascending order 
-                      by the most recent call to 'self.orderBy'.
+        PRECONDITION: The indexes of the random keys are already sorted
+                      by a call to 'self.orderBy'.
         POSTCONDITION: The shape of the population of random keys is unchanged.
                        The first 'self.eliteCount' random keys are still the best keys from
                        the most recent call to 'self.orderBy'.
-                       The remaining keys in the population are constructed by biased crossover.
         """
         with torch.no_grad():
             keyShape = self.keys.shape[1:]
             #----
-            elites = self.keys[:self.eliteCount]
-            mutants = torch.rand(self.mutantCount, *keyShape)
-            nonElites = torch.cat([self.keys[self.eliteCount : self.nonMutantCount], mutants], 0)
+            if self.mutantCount > 0:
+                mutants = torch.rand(self.mutantCount, *keyShape, dtype=self.dtype)
+                nonElites = torch.cat([self.keys[self.indexes[self.eliteCount : self.nonMutantCount]], mutants], 0)
+            else:
+                nonElites = self.keys[self.indexes[self.eliteCount : self.nonMutantCount]]
             nonEliteCount = len(nonElites)
             #----
+            elites = self.elites
             eliteSelectors = torch.multinomial(torch.full((self.eliteCount,), 0.5), nonEliteCount, replacement=True)
             selectedElites = elites[eliteSelectors]
             #----
             nonEliteSelectors = torch.multinomial(torch.full((nonEliteCount,), 0.5), nonEliteCount, replacement=True)
             selectedNonElites = nonElites[nonEliteSelectors]
             #----
-            # offspringSelectors = torch.rand(nonEliteCount, *keyShape).bernoulli()
-            offspringSelectors = torch.full((nonEliteCount, *keyShape), 0.5).bernoulli()
-            offspring = (offspringSelectors * selectedElites) + ((1 - offspringSelectors) * selectedNonElites)
+            offspringSelectors = torch.full((nonEliteCount, *keyShape), 0.5, dtype=self.dtype).bernoulli()
+            offspring = (offspringSelectors * selectedElites) + ((1.0 - offspringSelectors) * selectedNonElites)
             #----
-            self.keys = torch.nn.Parameter(torch.cat([elites, offspring], 0))
+            torch.cat([elites, offspring], 0, out=self.keys)
     #------------------------------------------------------
 
 
