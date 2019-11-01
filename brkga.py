@@ -56,6 +56,12 @@ def optAdadelta(lr=1.0, rho=0.9, eps=1e-6, weight_decay=0):
     return opt
 
 
+def optRMSprop(lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0, momentum=0, centered=False):
+    def opt(params):
+        return torch.optim.RMSprop(params, lr=lr, alpha=alpha, eps=eps, weight_decay=weight_decay, momentum=momentum, centered=centered)
+    return opt
+
+
 
 #===============================================================================
 
