@@ -43,8 +43,7 @@ def box0(fun, lower, upper):
 
 def box1(fun, initialLower, initialUpper):
     """
-    1 dimension per population member.
-    For keyshape: (population_size, parameter keys + two bounds keys)
+    Use for keyshape: (population_size, parameter_keys + two_bounds_keys)
     where the second dimension has lower and upper bounds keys
     prepended to the parameters keys.
     """
@@ -73,8 +72,7 @@ def box1(fun, initialLower, initialUpper):
 
 def box2(fun, initialLower, initialUpper):
     """
-    2 dimensions per population member.
-    For keyshape: (population size, 3, parameter keys)
+    Use for keyshape: (population_size, 3, parameter_keys)
     where the first parameter dimension is two rows of lower and upper bounds keys,
     and one row of parameters keys.
     The bounds are learned, two per parameter.
@@ -88,7 +86,7 @@ def box2(fun, initialLower, initialUpper):
     def decode(keys):
         lowers,uppers = bounds(keys)
         widths = uppers - lowers
-        return (x[2] * widths) + lowers
+        return (keys[2] * widths) + lowers
     #----
     def evaluate(keys):
         return fun(decode(keys))
@@ -98,8 +96,7 @@ def box2(fun, initialLower, initialUpper):
 
 def box3(fun, initialLower, initialUpper):
     """
-    2 dimensions per population member.
-    For keyshape: (population size, 3, parameter keys)
+    Use for keyshape: (population_size, 3, parameter_keys)
     where the first parameter dimension is two rows of lower and upper bounds keys,
     and one row of parameters keys.
     The bounds are learned, two per parameter.
@@ -126,12 +123,12 @@ def box3(fun, initialLower, initialUpper):
     return bounds,decode,evaluate
 
 
-def Optimize(keyShape, elites=2, mutants=2):
+def Optimize(box, keyShape, elites=2, mutants=2):
     """
     Minimize the HappyCat function in the interval (-2,+2).
     """
     trial = 0
-    bounds,decode,f = box1(HappyCat, -2.0, 2.0)
+    bounds,decode,f = box  #box3(HappyCat, -2.0, 2.0)
     pop = BRKGA(keyShape, elites=elites, mutants=mutants)
     results = pop.map(f)
     bestResult,best = pop.orderBy(results)
@@ -159,13 +156,13 @@ def Optimize(keyShape, elites=2, mutants=2):
 
 
 
-def OptimizeGrad(keyShape, elites=2, mutants=2, lr=0.001):
+def OptimizeGrad(box, keyShape, elites=2, mutants=2, lr=0.001):
     """
     Minimize the HappyCat function in the interval (-2,+2).
     This function uses gradient information to improve the evolved solutions.
     """
     trial = 0
-    bounds,decode,f = box1(HappyCat, -2.0, 2.0)
+    bounds,decode,f = box
     pop = BRKGA(keyShape, elites=elites, mutants=mutants, optimizer=optAdam(lr=lr))
     try:
         results = pop.map(f)
@@ -200,29 +197,32 @@ def OptimizeGrad(keyShape, elites=2, mutants=2, lr=0.001):
 if __name__ == '__main__':
     
     ## Optimize only the parameter keys:
-    # Optimize((20,10), elites=3, mutants=3)
-    # OptimizeGrad((20,10), elites=3, mutants=3, lr=1.0e-8)
+    # Optimize(box0(HappyCat, -2.0, 2.0), (50,10), elites=3, mutants=3)
+    # OptimizeGrad(box0(HappyCat, -2.0, 2.0), (20,10), elites=3, mutants=3, lr=1.0e-8)
 
     ## Optimize the bounding box by prepending lower and upper bounds to all parameter keys:
-    # Optimize((20,10+2), elites=3, mutants=3)
-    OptimizeGrad((20,10+2), elites=3, mutants=3, lr=1.0e-10)
+    # Optimize(box1(HappyCat, -2.0, 2.0), (10,10+2), elites=3, mutants=3)
+    # OptimizeGrad(box1(HappyCat, -2.0, 2.0), (10,10+2), elites=3, mutants=3, lr=1.0e-10)
 
     ## Optimize lower and upper bounds for every parameter key:
-    # Optimize((20,3,10), elites=3, mutants=3)
-    # OptimizeGrad((20,3,10), elites=3, mutants=3, lr=1.0e-8)
+    Optimize(box2(HappyCat, -2.0, 2.0), (20,3,10), elites=3, mutants=3)
+    # OptimizeGrad(box2(HappyCat, -2.0, 2.0), (20,3,10), elites=3, mutants=3, lr=1.0e-8)
 
+    ## Optimize lower and upper bounds for every parameter key:
+    # Optimize(box3(HappyCat, -2.0, 2.0), (20,3,10), elites=3, mutants=3)
+    # OptimizeGrad(box3(HappyCat, -2.0, 2.0), (20,3,10), elites=3, mutants=3, lr=1.0e-8)
 
 """
-# OptimizeGrad((10,10+2), elites=3, mutants=3, lr=1.0e-10)
+# OptimizeGrad(box1(HappyCat, -2.0, 2.0), (10,10+2), elites=3, mutants=3, lr=1.0e-10)
 
-[ 33751] 0.02897739
+[ 20003] 0.03961472
 BRKGA keys=
-tensor([0.3464, 0.1415, 0.7916, 0.8312, 0.5307, 0.3156, 0.2378, 0.9082, 0.9056,
-        0.6130, 0.2166, 0.2535], dtype=torch.float64)
-HappyCat Bounds: lower:-1.4338566499343643 upper:-0.614287517658779
+tensor([0.1348, 0.3538, 0.2620, 0.4432, 0.9986, 0.6629, 0.2453, 0.7208, 0.7745,
+        0.9454, 0.5650, 0.0409], dtype=torch.float64)
+HappyCat Bounds: lower:-1.4609493686795931 upper:-0.5846058774871854
 HappyCat parameters=
-tensor([-0.7851, -0.7526, -0.9989, -1.1752, -1.2390, -0.6895, -0.6917, -0.9315,
-        -1.2563, -1.2261], dtype=torch.float64)
+tensor([-1.2314, -1.0726, -0.5859, -0.8800, -1.2460, -0.8293, -0.7822, -0.6325,
+        -0.9658, -1.4251], dtype=torch.float64)
 
 
 """

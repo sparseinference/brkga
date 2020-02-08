@@ -153,7 +153,7 @@ class BRKGA():
             nonEliteSelectors = torch.multinomial(torch.full((nonEliteCount,), 0.5), nonEliteCount, replacement=True)
             selectedNonElites = nonElites[nonEliteSelectors]
             #----
-            offspringSelectors = torch.full((nonEliteCount, *keyShape), 0.5, dtype=self.dtype).bernoulli()
+            offspringSelectors = torch.empty((nonEliteCount, *keyShape), dtype=self.dtype).bernoulli_(p=0.5)
             offspring = (offspringSelectors * selectedElites) + ((1.0 - offspringSelectors) * selectedNonElites)
             #----
             torch.cat([elites, offspring], 0, out=self.keys)
